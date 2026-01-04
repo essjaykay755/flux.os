@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700&family=JetBrains+Mono:wght@300;500&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --anodized-black: #0a0a0b;
+            --anodized-gray: #1a1a1c;
+            --metal-highlight: rgba(255, 255, 255, 0.03);
+            --laser-blue: #00e5ff;
+            --precision-red: #ff3e3e;
+        }
+
+        body {
+            background-color: var(--anodized-black);
+            color: #e2e2e7;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            cursor: crosshair;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Anodized Texture Filter */
+        .grain {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+            opacity: 0.4;
+            mix-blend-mode: overlay;
+        }
+
+        /* Machined Metal Surfaces */
+        .monolith {
+            background: linear-gradient(145deg, #1e1e21, #141416);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow:
+                inset 1px 1px 0px var(--metal-highlight),
+                20px 20px 60px #050506,
+                -5px -5px 20px rgba(255, 255, 255, 0.01);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .monolith::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+        }
+
+        /* Radial Scanning Effect */
+        .radar-grid {
+            background-image:
+                radial-gradient(circle at center, rgba(0, 229, 255, 0.05) 0%, transparent 70%),
+                linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+            background-position: center;
+        }
+
+        .scan-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--laser-blue), transparent);
+            opacity: 0.3;
+            animation: scan 4s linear infinite;
+        }
+
+        @keyframes scan {
+            0% {
+                top: 0%;
+                opacity: 0;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+
+            100% {
+                top: 100%;
+                opacity: 0;
+            }
+        }
+
+        .peer-node {
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            filter: grayscale(0.5);
+        }
+
+        .peer-node:hover {
+            filter: grayscale(0);
+            transform: translateY(-4px) scale(1.02);
+            border-color: var(--laser-blue);
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.15);
+        }
+
+        .status-pulse {
+            width: 6px;
+            height: 6px;
+            background: var(--laser-blue);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--laser-blue);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            70% {
+                transform: scale(3);
+                opacity: 0;
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 0;
+            }
+        }
+
+        /* Scrollbar Precision */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--anodized-black);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 2px;
+        }
+
+        .glitch-text:hover {
+            text-shadow: 2px 0 var(--precision-red), -2px 0 var(--laser-blue);
+        }
+    </style>
+</head>
+
+<body class="flex items-center justify-center p-8">
+
+    <!-- Noise SVG Filter -->
+    <svg class="hidden">
+        <filter id="noise">
+            <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="4" stitchTiles="stitch" />
+            <feColorMatrix type="saturate" values="0" />
+        </filter>
+    </svg>
+    <div class="grain" style="filter: url(#noise)"></div>
+
+    <!-- Main Viewport -->
+    <main class="w-full max-w-6xl h-full max-h-[800px] flex flex-col relative z-10">
+
+        <!-- Top Navigation / Telemetry -->
+        <header class="flex justify-between items-end mb-12 px-2">
+            <div>
+                <h1 class="text-4xl font-bold tracking-tighter uppercase glitch-text cursor-default">
+                    Flux<span class="text-[var(--laser-blue)]">.</span>OS
+                </h1>
+                <p class="mono text-[10px] uppercase tracking-[0.3em] text-white/40 mt-1">Local Network P2P Protocol
+                    v4.0.2</p>
+            </div>
+
+            <div class="flex gap-8 items-end">
+                <div class="text-right">
+                    <p class="mono text-[9px] uppercase text-white/30 mb-1">Local Identity</p>
+                    <p class="mono text-sm font-medium">192.168.1.144 <span class="text-[var(--laser-blue)]">/
+                            MAC-7E</span></p>
+                </div>
+                <div class="text-right border-l border-white/10 pl-8">
+                    <p class="mono text-[9px] uppercase text-white/30 mb-1">Encryption</p>
+                    <p class="mono text-sm font-medium">AES-256-GCM</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Peer Discovery Environment -->
+        <section class="flex-1 monolith rounded-xl radar-grid p-12 relative flex flex-col">
+            <div class="scan-line"></div>
+
+            <!-- Contextual UI Labels -->
+            <div class="absolute top-4 left-6 mono text-[9px] text-white/20 uppercase tracking-widest">Scanning active
+                nodes...</div>
+            <div class="absolute bottom-4 right-6 mono text-[9px] text-white/20 uppercase tracking-widest">Frequency:
+                5.4GHz</div>
+
+            <!-- Discovery Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 relative z-20 overflow-y-auto pr-4">
+
+                <!-- Peer Card: Active -->
+                <div
+                    class="peer-node monolith rounded-lg p-6 group cursor-pointer border-white/5 bg-opacity-50 backdrop-blur-md">
+                    <div class="flex justify-between items-start mb-8">
+                        <div
+                            class="w-12 h-12 bg-white/5 rounded border border-white/10 flex items-center justify-center group-hover:border-[var(--laser-blue)] transition-colors">
+                            <svg class="w-6 h-6 text-white/60 group-hover:text-[var(--laser-blue)]" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
+                                </path>
+                            </svg>
+                        </div>
+                        <div class="status-pulse"></div>
+                    </div>
+                    <h3 class="mono text-lg font-medium text-white/90">XPS-Station-01</h3>
+                    <p class="mono text-[10px] text-white/40 mb-6 uppercase tracking-wider">Windows 11 • Peer-to-Peer
+                    </p>
+                    <div class="flex gap-2">
+                        <div class="flex-1 h-[1px] bg-white/10 self-center"></div>
+                        <span class="mono text-[9px] text-[var(--laser-blue)] uppercase">Ready to receive</span>
+                    </div>
+                </div>
+
+                <!-- Peer Card: Mobile -->
+                <div
+                    class="peer-node monolith rounded-lg p-6 group cursor-pointer border-white/5 bg-opacity-50 backdrop-blur-md">
+                    <div class="flex justify-between items-start mb-8">
+                        <div
+                            class="w-12 h-12 bg-white/5 rounded border border-white/10 flex items-center justify-center group-hover:border-[var(--laser-blue)] transition-colors">
+                            <svg class="w-6 h-6 text-white/60 group-hover:text-[var(--laser-blue)]" fill="none"
+                                stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                                    d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z">
+                                </path>
+                            </svg>
+                        </div>
+                        <div class="status-pulse"></div>
+                    </div>
+                    <h3 class="mono text-lg font-medium text-white/90">Pixel-7-Pro</h3>
+                    <p class="mono text-[10px] text-white/40 mb-6 uppercase tracking-wider">Android 14 • Nearby</p>
+                    <div class="flex gap-2">
+                        <div class="flex-1 h-[1px] bg-white/10 self-center"></div>
+                        <span class="mono text-[9px] text-[var(--laser-blue)] uppercase">Ready to receive</span>
+                    </div>
+                </div>
+
+                <!-- Peer Card: Active Transfer -->
+                <div class="peer-node monolith rounded-lg p-6 border-[var(--laser-blue)]/30 bg-white/[0.02]">
+                    <div class="flex justify-between items-start mb-4">
+                        <div
+                            class="w-12 h-12 bg-[var(--laser-blue)]/10 rounded border border-[var(--laser-blue)]/50 flex items-center justify-center">
+                            <svg class="w-6 h-6 text-[var(--laser-blue)]" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10">
+                                </path>
+                            </svg>
+                        </div>
+                        <span class="mono text-[10px] text-[var(--laser-blue)] animate-pulse">42.8 MB/s</span>
+                    </div>
+                    <h3 class="mono text-lg font-medium text-white/90">MacBook-M3</h3>
+                    <p class="mono text-[10px] text-white/40 mb-4 uppercase tracking-wider">Receiving: raw_footage.mov
+                    </p>
+
+                    <div class="w-full bg-white/5 h-1 relative overflow-hidden">
+                        <div class="absolute top-0 left-0 h-full bg-[var(--laser-blue)] shadow-[0_0_10px_rgba(0,229,255,0.5)]"
+                            style="width: 64%"></div>
+                    </div>
+                    <div class="flex justify-between mt-2">
+                        <span class="mono text-[9px] text-white/30 uppercase">64% Completed</span>
+                        <span class="mono text-[9px] text-white/30 uppercase">1.2 GB / 2.0 GB</span>
+                    </div>
+                </div>
+
+                <!-- Empty "Drop Here" State -->
+                <div
+                    class="lg:col-span-3 border-2 border-dashed border-white/5 rounded-xl mt-4 flex flex-col items-center justify-center p-12 group hover:border-[var(--laser-blue)]/20 transition-all duration-700">
+                    <div class="text-white/10 group-hover:text-[var(--laser-blue)]/40 transition-colors mb-4">
+                        <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="0.5"
+                                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12">
+                            </path>
+                        </svg>
+                    </div>
+                    <p
+                        class="mono text-xs uppercase tracking-[0.4em] text-white/20 group-hover:text-white/50 transition-colors">
+                        Drag files into the monolithic field to broadcast</p>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Bottom Telemetry / Footer -->
+        <footer class="mt-8 flex justify-between items-center px-2">
+            <div class="flex gap-6">
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e]"></div>
+                    <span class="mono text-[10px] uppercase tracking-widest text-white/40">Secure Tunnel Active</span>
+                </div>
+                <div class="mono text-[10px] uppercase tracking-widest text-white/20">|</div>
+                <div class="mono text-[10px] uppercase tracking-widest text-white/40">Latency: 2ms</div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <button
+                    class="mono text-[10px] uppercase border border-white/10 px-4 py-2 hover:bg-white hover:text-black transition-all">Clear
+                    History</button>
+                <button
+                    class="mono text-[10px] uppercase bg-white/5 border border-white/10 px-4 py-2 hover:border-[var(--laser-blue)] transition-all">Settings</button>
+            </div>
+        </footer>
+    </main>
+
+    <!-- Interactive Overlay Elements -->
+    <div class="fixed bottom-12 right-12 flex flex-col items-end gap-2 pointer-events-none opacity-20">
+        <div class="mono text-[8px] uppercase tracking-tighter">System Output:</div>
+        <div class="mono text-[8px] uppercase tracking-tighter">>> Handshake established with Pixel-7-Pro</div>
+        <div class="mono text-[8px] uppercase tracking-tighter">>> Port 53342 open</div>
+        <div class="mono text-[8px] uppercase tracking-tighter">>> Signal Strength: -42dBm</div>
+    </div>
+
+    <script>
+        // Subtle Mouse parallax for the "Monolith" feel
+        document.addEventListener('mousemove', (e) => {
+            const monoliths = document.querySelectorAll('.monolith');
+            const x = (window.innerWidth / 2 - e.pageX) / 50;
+            const y = (window.innerHeight / 2 - e.pageY) / 50;
+
+            monoliths.forEach(m => {
+                m.style.transform = `rotateY(${x}deg) rotateX(${-y}deg)`;
+            });
+        });
+
+        // Simulating the "Drag over" state
+        window.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            document.body.style.backgroundColor = '#0f1418';
+        });
+
+        window.addEventListener('dragleave', () => {
+            document.body.style.backgroundColor = 'var(--anodized-black)';
+        });
+    </script>
+</body>
+
+</html>
