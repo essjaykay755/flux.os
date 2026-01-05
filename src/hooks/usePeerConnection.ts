@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
+import { saveAs } from 'file-saver';
 import type { SignalMessage, FileNode, TransferMetadata } from '../types';
 
-const CHUNK_SIZE = 16 * 1024; // 16KB chunks
+const CHUNK_SIZE = 64 * 1024; // 64KB chunks - max safe size for WebRTC
 
 // Dynamically imported simple-peer
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -11,6 +12,7 @@ interface UsePeerConnectionProps {
     localPeerId: string;
     sendSignal: (message: Omit<SignalMessage, 'from'>) => void;
     onSignal: (callback: (message: SignalMessage) => void) => void;
+    stagedFiles?: FileNode[];  // Files staged for sharing
 }
 
 interface TransferState {
@@ -25,6 +27,7 @@ interface TransferState {
 interface UsePeerConnectionReturn {
     connectToPeer: (peerId: string) => void;
     sendFiles: (files: FileNode[], targetPeerId: string) => Promise<void>;
+    requestFiles: (files: FileNode[], fromPeerId: string) => void;
     transferState: TransferState;
     receivedFiles: FileNode[];
     connectedPeers: Set<string>;
@@ -35,9 +38,11 @@ export function usePeerConnection({
     localPeerId: _localPeerId,
     sendSignal,
     onSignal,
+    stagedFiles = [],
 }: UsePeerConnectionProps): UsePeerConnectionReturn {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const peersRef = useRef<Map<string, any>>(new Map());
+    const stagedFilesRef = useRef<FileNode[]>([]);
     const [connectedPeers, setConnectedPeers] = useState<Set<string>>(new Set());
     const [isReady, setIsReady] = useState(false);
     const [transferState, setTransferState] = useState<TransferState>({
@@ -65,8 +70,16 @@ export function usePeerConnection({
         });
     }, []);
 
+    // Keep stagedFilesRef updated
+    useEffect(() => {
+        stagedFilesRef.current = stagedFiles;
+    }, [stagedFiles]);
+
+    // Ref for sendFilesInternal to avoid circular dependency
+    const sendFilesInternalRef = useRef<((files: FileNode[], targetPeerId: string) => Promise<void>) | null>(null);
+
     // Handle incoming data
-    const handleIncomingData = useCallback((data: Uint8Array) => {
+    const handleIncomingData = useCallback((data: Uint8Array, fromPeerId: string) => {
         // Try to parse as JSON (metadata)
         try {
             const text = new TextDecoder().decode(data);
@@ -95,6 +108,15 @@ export function usePeerConnection({
                     const blob = new Blob(chunks);
                     const file = new File([blob], fileMetadata.fileName!, { type: 'application/octet-stream' });
 
+                    // Trigger browser download immediately using file-saver
+                    console.log(`[Peer] Triggering download for: ${fileMetadata.fileName}, size: ${blob.size}`);
+                    try {
+                        saveAs(blob, fileMetadata.fileName!);
+                        console.log(`[Peer] Download triggered successfully for: ${fileMetadata.fileName}`);
+                    } catch (downloadError) {
+                        console.error(`[Peer] Download failed for ${fileMetadata.fileName}:`, downloadError);
+                    }
+
                     const fileNode: FileNode = {
                         id: metadata.fileId!,
                         name: fileMetadata.fileName!,
@@ -114,6 +136,35 @@ export function usePeerConnection({
                     status: 'idle',
                     progress: 100,
                 }));
+            } else if (metadata.type === 'file-request') {
+                // Someone is requesting files from us
+                console.log('[Peer] Received file request from', fromPeerId, ':', metadata.requestedFiles?.length, 'files');
+                if (metadata.requestedFiles && sendFilesInternalRef.current) {
+                    // Recursively find files with File objects from our staged files
+                    const requestedIds = new Set(metadata.requestedFiles.map(f => f.id));
+
+                    const findFilesRecursively = (nodes: FileNode[]): FileNode[] => {
+                        const result: FileNode[] = [];
+                        for (const node of nodes) {
+                            if (requestedIds.has(node.id) && node.file) {
+                                result.push(node);
+                            }
+                            if (node.children) {
+                                result.push(...findFilesRecursively(node.children));
+                            }
+                        }
+                        return result;
+                    };
+
+                    const filesToSend = findFilesRecursively(stagedFilesRef.current);
+                    console.log('[Peer] Found', filesToSend.length, 'files to send');
+                    if (filesToSend.length > 0) {
+                        // Send the files back to the requester
+                        sendFilesInternalRef.current(filesToSend, fromPeerId);
+                    } else {
+                        console.warn('[Peer] No matching files found for request. Requested IDs:', [...requestedIds]);
+                    }
+                }
             }
         } catch {
             // Binary chunk data
@@ -146,8 +197,19 @@ export function usePeerConnection({
             return null;
         }
 
+        // Check if we already have this peer
         if (peersRef.current.has(targetPeerId)) {
-            return peersRef.current.get(targetPeerId)!;
+            const existingPeer = peersRef.current.get(targetPeerId)!;
+            // Check if peer is still connected
+            if (existingPeer.connected) {
+                console.log(`[Peer] Reusing existing connected peer for ${targetPeerId}`);
+                return existingPeer;
+            } else {
+                // Peer exists but not connected, destroy and recreate
+                console.log(`[Peer] Destroying stale peer for ${targetPeerId}`);
+                try { existingPeer.destroy(); } catch (e) { console.log('[Peer] Error destroying peer:', e); }
+                peersRef.current.delete(targetPeerId);
+            }
         }
 
         console.log(`[Peer] Creating ${initiator ? 'initiator' : 'responder'} connection to ${targetPeerId}`);
@@ -155,6 +217,10 @@ export function usePeerConnection({
         const peer = new SimplePeer({
             initiator,
             trickle: true,
+            channelConfig: {
+                ordered: true, // Keep ordered for reliability
+                maxRetransmits: 30, // Allow retransmits for reliability
+            },
             config: {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
@@ -194,7 +260,7 @@ export function usePeerConnection({
         });
 
         peer.on('data', (data: Uint8Array) => {
-            handleIncomingData(data);
+            handleIncomingData(data, targetPeerId);
         });
 
         peersRef.current.set(targetPeerId, peer);
@@ -203,16 +269,22 @@ export function usePeerConnection({
 
     // Handle incoming signals
     useEffect(() => {
+        console.log('[Peer] Setting up signal handler');
         onSignal((message: SignalMessage) => {
             const { from, type, payload } = message;
+            console.log(`[Peer] Processing signal: ${type} from ${from}`);
 
             let peer = peersRef.current.get(from);
             if (!peer && type === 'offer') {
+                console.log(`[Peer] Creating new peer for incoming offer from ${from}`);
                 peer = createPeer(from, false) ?? undefined;
             }
 
             if (peer) {
+                console.log(`[Peer] Passing signal to peer connection`);
                 peer.signal(payload as Parameters<typeof peer.signal>[0]);
+            } else {
+                console.warn(`[Peer] No peer found for signal from ${from}`);
             }
         });
     }, [onSignal, createPeer]);
@@ -284,6 +356,8 @@ export function usePeerConnection({
 
             const buffer = await file.arrayBuffer();
             let offset = 0;
+            let chunksSent = 0;
+            console.log(`[Transfer] Starting to send ${file.name}, size: ${file.size}, chunks: ${Math.ceil(file.size / CHUNK_SIZE)}`);
 
             while (offset < buffer.byteLength) {
                 const chunk = buffer.slice(offset, offset + CHUNK_SIZE);
@@ -299,21 +373,38 @@ export function usePeerConnection({
 
                 offset += CHUNK_SIZE;
                 transferredSize += chunk.byteLength;
+                chunksSent++;
 
-                const elapsed = (Date.now() - startTime) / 1000;
-                const speed = elapsed > 0 ? transferredSize / elapsed : 0;
+                // Update state less frequently for better performance (every 5 chunks)
+                if (chunksSent % 5 === 0 || offset >= buffer.byteLength) {
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    const speed = elapsed > 0 ? transferredSize / elapsed : 0;
 
-                setTransferState({
-                    status: 'sending',
-                    fileName: fileNode.name,
-                    progress: Math.round((transferredSize / totalSize) * 100),
-                    speed,
-                    totalSize,
-                    transferredSize,
-                });
+                    setTransferState({
+                        status: 'sending',
+                        fileName: fileNode.name,
+                        progress: Math.round((transferredSize / totalSize) * 100),
+                        speed,
+                        totalSize,
+                        transferredSize,
+                    });
+                }
 
-                if (offset % (CHUNK_SIZE * 10) === 0) {
-                    await new Promise(resolve => setTimeout(resolve, 10));
+                // Flow control: if buffer is getting full, wait for it to drain
+                // Check bufferedAmount on the data channel if available
+                const channel = peer._channel as RTCDataChannel | undefined;
+                if (channel && channel.bufferedAmount > 1024 * 1024) {
+                    // Wait for buffer to drain below 256KB before continuing
+                    await new Promise<void>(resolve => {
+                        const checkBuffer = () => {
+                            if (!channel || channel.bufferedAmount < 256 * 1024) {
+                                resolve();
+                            } else {
+                                setTimeout(checkBuffer, 10);
+                            }
+                        };
+                        checkBuffer();
+                    });
                 }
             }
 
@@ -334,9 +425,36 @@ export function usePeerConnection({
         });
     }, []);
 
+    // Set the ref so handleIncomingData can use sendFiles
+    useEffect(() => {
+        sendFilesInternalRef.current = sendFiles;
+    }, [sendFiles]);
+
+    // Request files from a peer (sends a file-request message)
+    const requestFiles = useCallback((files: FileNode[], fromPeerId: string) => {
+        const peer = peersRef.current.get(fromPeerId);
+        if (!peer) {
+            console.error('[Peer] No connection to', fromPeerId, 'for file request');
+            return;
+        }
+
+        console.log('[Peer] Requesting', files.length, 'files from', fromPeerId);
+
+        const requestMetadata = {
+            type: 'file-request',
+            requestedFiles: files.map(f => ({ id: f.id, name: f.name, path: f.path, type: f.type, size: f.size })),
+            fromPeerId: fromPeerId,  // This is actually the requester's peer ID, but we need a way to know who to send back to
+        };
+
+        // We need to send the local peer ID so the sender knows where to send
+        // For now, we'll use the existing peer connection (which already knows the target)
+        peer.send(JSON.stringify(requestMetadata));
+    }, []);
+
     return {
         connectToPeer,
         sendFiles,
+        requestFiles,
         transferState,
         receivedFiles,
         connectedPeers,

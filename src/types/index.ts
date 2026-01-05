@@ -52,13 +52,14 @@ export interface FileChunk {
 
 // Transfer metadata
 export interface TransferMetadata {
-    type: 'file-start' | 'file-end' | 'folder-structure';
+    type: 'file-start' | 'file-end' | 'folder-structure' | 'file-request';
     fileId?: string;
     fileName?: string;
     fileSize?: number;
     filePath?: string;
     totalChunks?: number;
     structure?: FileNode[];
+    requestedFiles?: FileNode[];  // Files being requested
 }
 
 // Socket events

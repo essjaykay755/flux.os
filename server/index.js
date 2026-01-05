@@ -79,7 +79,12 @@ io.on('connection', (socket) => {
     // Handle WebRTC signaling
     socket.on('signal', (message) => {
         const { to, type, payload } = message;
-        console.log(`[>] Signal ${type} from ${socket.id} to ${to}`);
+        const targetPeer = peers.get(to);
+        console.log(`[>] Signal ${type} from ${socket.id} to ${to} (target exists: ${!!targetPeer})`);
+
+        if (!targetPeer) {
+            console.log(`[!] Warning: Target peer ${to} not found in peers map. Current peers:`, Array.from(peers.keys()));
+        }
 
         // Forward signal to target peer
         io.to(to).emit('signal', {

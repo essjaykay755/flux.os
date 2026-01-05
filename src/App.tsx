@@ -19,6 +19,7 @@ function App() {
   const {
     connectToPeer,
     sendFiles,
+    requestFiles,
     transferState,
     receivedFiles,
     connectedPeers,
@@ -27,6 +28,7 @@ function App() {
     localPeerId: localPeer?.id || '',
     sendSignal,
     onSignal,
+    stagedFiles: selectedFiles,
   });
 
   const handlePeerSelect = useCallback((peer: Peer) => {
@@ -51,17 +53,33 @@ function App() {
     shareFiles(selectedFiles);
   }, [selectedFiles, shareFiles]);
 
+  // State for pending file request (when we need to wait for connection)
+  const [pendingRequest, setPendingRequest] = useState<{ files: FileNode[], peerId: string } | null>(null);
+
+  // Effect to send pending request once connected
+  useEffect(() => {
+    if (pendingRequest && connectedPeers.has(pendingRequest.peerId)) {
+      console.log('[App] Connection established, sending file request');
+      requestFiles(pendingRequest.files, pendingRequest.peerId);
+      setPendingRequest(null);
+    }
+  }, [pendingRequest, connectedPeers, requestFiles]);
+
   const handleRequestFiles = useCallback((files: FileNode[]) => {
     // Connect and request the files from the browsing peer
     if (browsingPeer) {
-      setSelectedPeer(browsingPeer);
-      if (!connectedPeers.has(browsingPeer.id)) {
+      if (connectedPeers.has(browsingPeer.id)) {
+        // Already connected, request immediately
+        console.log('[App] Already connected, requesting files');
+        requestFiles(files, browsingPeer.id);
+      } else {
+        // Not connected, connect and set pending request
+        console.log('[App] Not connected, connecting and setting pending request');
         connectToPeer(browsingPeer.id);
+        setPendingRequest({ files, peerId: browsingPeer.id });
       }
-      // TODO: Request specific files via WebRTC data channel
-      console.log('Requesting files:', files);
     }
-  }, [browsingPeer, connectedPeers, connectToPeer]);
+  }, [browsingPeer, connectedPeers, connectToPeer, requestFiles]);
 
   const handleSendFiles = useCallback(async () => {
     if (selectedPeer && selectedFiles.length > 0) {

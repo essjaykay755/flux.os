@@ -105,9 +105,12 @@ export function useSocket(): UseSocketReturn {
         });
 
         newSocket.on('signal', (message: SignalMessage) => {
-            console.log('[Socket] Received signal:', message.type);
+            console.log('[Socket] Received signal:', message.type, 'from:', message.from, 'payload type:', typeof message.payload);
             if (signalCallbackRef.current) {
+                console.log('[Socket] Calling signal callback');
                 signalCallbackRef.current(message);
+            } else {
+                console.warn('[Socket] No signal callback registered!');
             }
         });
 
@@ -120,11 +123,15 @@ export function useSocket(): UseSocketReturn {
 
     const sendSignal = useCallback((message: Omit<SignalMessage, 'from'>) => {
         if (socket) {
+            console.log('[Socket] Sending signal:', message.type, 'to', message.to);
             socket.emit('signal', message);
+        } else {
+            console.error('[Socket] Cannot send signal - socket not connected');
         }
     }, [socket]);
 
     const onSignal = useCallback((callback: (message: SignalMessage) => void) => {
+        console.log('[Socket] Signal callback being registered');
         signalCallbackRef.current = callback;
     }, []);
 

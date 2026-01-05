@@ -25,8 +25,11 @@ export function FileExplorer({ files, onClear }: FileExplorerProps) {
     }, []);
 
     const downloadFile = useCallback((node: FileNode) => {
+        console.log('[FileExplorer] Attempting to download:', node.name, 'file object:', node.file);
         if (node.file) {
             saveAs(node.file, node.name);
+        } else {
+            console.warn('[FileExplorer] No file object available for:', node.name);
         }
     }, []);
 

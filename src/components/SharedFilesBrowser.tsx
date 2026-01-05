@@ -36,7 +36,22 @@ export function SharedFilesBrowser({ peer, onClose, onRequestFiles }: SharedFile
     };
 
     const handleRequestDownload = () => {
-        const filesToRequest = sharedFiles.filter(f => selectedFiles.has(f.id));
+        // Recursively find all selected files (including nested ones)
+        const findSelectedFiles = (nodes: FileNode[]): FileNode[] => {
+            const result: FileNode[] = [];
+            for (const node of nodes) {
+                if (selectedFiles.has(node.id)) {
+                    result.push(node);
+                }
+                if (node.children) {
+                    result.push(...findSelectedFiles(node.children));
+                }
+            }
+            return result;
+        };
+
+        const filesToRequest = findSelectedFiles(sharedFiles);
+        console.log('[SharedFilesBrowser] Requesting', filesToRequest.length, 'files');
         onRequestFiles(filesToRequest);
         onClose();
     };
